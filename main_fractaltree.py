@@ -79,6 +79,42 @@ class Settings:
         settings.tree_chance = int(b.value())
 
 
+# Loading screen
+class LoadingScreen:
+    def __init__(self):
+        self.surface = Surface_Drawable((WIN_WIDTH, WIN_HEIGHT))
+        # loading screen design
+        self.surface.fill(c.WHITE)
+        l = label.Label("Loading: please wait")
+        l.set_x((WIN_WIDTH - l.get_width()) / 2)
+        l.set_y((WIN_HEIGHT - l.get_height()) / 2)
+        l.draw(self.surface)
+        # loading bar atributes
+        self.bar_start = 200
+        self.bar_end = WIN_WIDTH - 200
+        self.bar_percent = 0
+        self.bar_y = WIN_HEIGHT//2 + 100
+        self.bar_h = 30
+
+    def draw(self, win):
+        win.blit(self.surface, (0, 0))
+        # loading bar outline
+        pygame.draw.rect(win, c.BLACK, (self.bar_start, self.bar_y, self.bar_end-self.bar_start, self.bar_h), 1)
+        # loading bar fill
+        pygame.draw.rect(win, c.RED,
+                         (self.bar_start, self.bar_y, (self.bar_end-self.bar_start) * self.bar_percent, self.bar_h))
+
+    def load(self, current_task, total_tasks):
+        self.bar_percent = current_task / total_tasks  # size of red loading bar
+        self.draw(WIN)
+        pygame.display.update()
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                global inPlay
+                inPlay = False
+                return True  # true if the program must be quit from loading screen
+
+
 # abstract line class
 class Line:
     def __init__(self, a, b):
@@ -376,15 +412,16 @@ def create_flower(x, y, final_y):
 # function to create the forest and mountain range scene to be assigned to a button
 def create_scene_on_click(b):
     global current_frame
-    loading_screen()
     scene_buttons.get_button(1).on_release = create_scene_on_click
-    current_frame = frame.Frame([create_still_surface(create_scene()), scene_buttons], [scene_buttons.button_list])
+    scene = create_scene()
+    if scene is None:  # to exit program from loading screen
+        return
+    current_frame = frame.Frame([create_still_surface(scene), scene_buttons], [scene_buttons.button_list])
 
 
 # function to create the tree scene to be assigned to a button
 def create_fractal_screen_on_click(b):
     global current_frame
-    loading_screen()
     scene_buttons.get_button(1).on_release = create_fractal_screen_on_click
     current_frame = frame.Frame([create_still_surface(create_fractal_screen()), scene_buttons],
                                 [scene_buttons.button_list])
@@ -422,10 +459,17 @@ def return_to_main_menu(b=None):
 
 # create the forest and mountain range scene
 def create_scene():
+    current_task = 0
+    total_tasks = (settings.mountain_end-settings.mountain_start) / settings.mountain_frequency + \
+                  settings.foreground_end - settings.foreground_start
     # mountains
     mList = []
     for d in range(settings.mountain_start, settings.mountain_end, settings.mountain_frequency):
         mList.append(create_mountain(random.randrange(WIN_WIDTH), d, random.randrange(100, 800)))
+        current_task += 1
+        end = loading_screen.load(current_task, total_tasks)
+        if end:  # to exit program from loading screen
+            return
 
     # trees, bushes, flowers
     tList = []
@@ -440,6 +484,11 @@ def create_scene():
         if random.randrange(settings.tree_chance) == 0:  # trees
             tList.append(create_tree(random.randrange(WIN_WIDTH), t, WIN_HEIGHT))
 
+        current_task += 1
+        end = loading_screen.load(current_task, total_tasks)
+        if end:  # to exti program from loading screen
+            return
+
     bg = Surface_Drawable((WIN_WIDTH, WIN_HEIGHT))
     bg.fill(c.SKY)
     pygame.draw.rect(bg, c.DARK_GREEN, (0, settings.mountain_start, WIN_WIDTH, WIN_HEIGHT - settings.mountain_start))
@@ -449,10 +498,14 @@ def create_scene():
 
 # create the tree scene associated
 def create_fractal_screen():
-    tree = create_tree(550, 600, 600)
-    tree2 = create_bush(800, 600, 600)
-    mountain = create_mountain(250, 600, random.randrange(200, 500))
-    return frame.Frame([mountain, tree, tree2])  # frame for showing a few trees
+    floor = 600
+    tree = create_tree(550, floor, 600)
+    tree2 = create_bush(800, floor, 600)
+    mountain = create_mountain(250, floor, random.randrange(200, 500))
+    bg = Surface_Drawable((WIN_WIDTH, WIN_HEIGHT))
+    bg.fill(c.SKY)
+    pygame.draw.rect(bg, c.DARK_GREEN, (0, floor, WIN_WIDTH, WIN_HEIGHT - floor))
+    return frame.Frame([bg, mountain, tree, tree2])  # frame for showing a few trees
 
 
 # returns all the drawables of a frame drawn on a single surface
@@ -468,12 +521,6 @@ def create_still_scene(f):
     scene = create_still_surface(f)
     scene_frame = frame.Frame([scene], [f.button_list])
     return scene_frame
-
-
-# draws the loading screen
-def loading_screen():
-    WIN.blit(ls, (0, 0))
-    pygame.display.update()
 
 
 # function to redraw the screen
@@ -509,12 +556,7 @@ def random_if_range(a):
 settings = Settings()
 
 # ------------------ Loading Screen ------------------
-ls = Surface_Drawable((WIN_WIDTH, WIN_HEIGHT))
-ls.fill(c.WHITE)
-l = label.Label("Loading: please wait")
-l.set_x((WIN_WIDTH - l.get_width())/2)
-l.set_y((WIN_HEIGHT - l.get_height())/2)
-l.draw(ls)
+loading_screen = LoadingScreen()
 
 # ------------------ Redraw and Menu Buttons for Scenes ------------------
 scene_buttons = grid.Menu((10, 10, 120, 110), 2, 1, ["Menu", "Redraw"], 10, visible_lines=False)
